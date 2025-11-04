@@ -28,43 +28,28 @@ private:
         return node ? node->dist : -1;
     }
 
-    // Merge two leftist heap nodes with exception safety
+    // Merge two leftist heap nodes in-place for efficiency
     Node* mergeNodes(Node *h1, Node *h2) {
-        if (!h1) return copyTree(h2);
-        if (!h2) return copyTree(h1);
+        if (!h1) return h2;
+        if (!h2) return h1;
 
         // Ensure h1 has the higher priority (larger value for max-heap)
         if (cmp(h1->data, h2->data)) {
             std::swap(h1, h2);
         }
 
-        Node *newNode = nullptr;
-        try {
-            newNode = new Node(h1->data);
+        // h1 now has higher priority, recursively merge h1->right with h2
+        h1->right = mergeNodes(h1->right, h2);
 
-            // Recursively merge h1->right with h2
-            Node *mergedRight = mergeNodes(h1->right, h2);
-
-            // Copy left subtree
-            Node *copiedLeft = copyTree(h1->left);
-
-            newNode->right = mergedRight;
-            newNode->left = copiedLeft;
-
-            // Maintain leftist property: ensure left subtree has larger distance
-            if (getDist(newNode->left) < getDist(newNode->right)) {
-                std::swap(newNode->left, newNode->right);
-            }
-
-            // Update distance
-            newNode->dist = getDist(newNode->right) + 1;
-
-        } catch (...) {
-            delete newNode;
-            throw;
+        // Maintain leftist property: ensure left subtree has larger distance
+        if (getDist(h1->left) < getDist(h1->right)) {
+            std::swap(h1->left, h1->right);
         }
 
-        return newNode;
+        // Update distance
+        h1->dist = getDist(h1->right) + 1;
+
+        return h1;
     }
 
     // Copy subtree
@@ -152,22 +137,14 @@ public:
      * @param e the element to be pushed
      */
     void push(const T &e) {
-        // Save current state for exception safety
-        Node *oldRoot = root;
-        size_t oldSize = curSize;
-
         try {
             Node *newNode = new Node(e);
-            Node *newRoot = mergeNodes(root, newNode);
 
-            // Delete old tree and update root
-            deleteTree(root);
-            root = newRoot;
+            // Use merge to insert - note this may not be fully exception-safe
+            // but provides the required O(log n) complexity
+            root = mergeNodes(root, newNode);
             curSize++;
         } catch (...) {
-            // Restore original state if any exception occurs
-            root = oldRoot;
-            curSize = oldSize;
             throw runtime_error();
         }
     }
@@ -181,25 +158,15 @@ public:
             throw container_is_empty();
         }
 
-        // Save current state for exception safety
-        Node *oldRoot = root;
-        size_t oldSize = curSize;
-
         try {
-            Node *leftChild = copyTree(root->left);
-            Node *rightChild = copyTree(root->right);
+            Node *oldRoot = root;
+            Node *leftChild = root->left;
+            Node *rightChild = root->right;
 
-            // Merge children to form new root
-            Node *newRoot = mergeNodes(leftChild, rightChild);
-
-            // Delete old tree and update root
-            deleteTree(root);
-            root = newRoot;
+            root = mergeNodes(leftChild, rightChild);
+            delete oldRoot;
             curSize--;
         } catch (...) {
-            // Restore original state if any exception occurs
-            root = oldRoot;
-            curSize = oldSize;
             throw runtime_error();
         }
     }
@@ -229,35 +196,14 @@ public:
     void merge(priority_queue &other) {
         if (this == &other) return;
 
-        // Save current states for exception safety
-        Node *oldRoot1 = root;
-        Node *oldRoot2 = other.root;
-        size_t oldSize1 = curSize;
-        size_t oldSize2 = other.curSize;
-
         try {
-            // Create copies of both subtrees
-            Node *copiedRoot1 = copyTree(root);
-            Node *copiedRoot2 = copyTree(other.root);
-
-            // Merge the copies
-            Node *newRoot = mergeNodes(copiedRoot1, copiedRoot2);
-
-            // Delete old trees and update roots
-            deleteTree(root);
-            deleteTree(other.root);
-            root = newRoot;
+            root = mergeNodes(root, other.root);
             curSize += other.curSize;
 
             // Clear other queue
             other.root = nullptr;
             other.curSize = 0;
         } catch (...) {
-            // Restore original states if any exception occurs
-            root = oldRoot1;
-            other.root = oldRoot2;
-            curSize = oldSize1;
-            other.curSize = oldSize2;
             throw runtime_error();
         }
     }
